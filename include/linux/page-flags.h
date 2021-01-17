@@ -191,6 +191,24 @@ enum pageflags {
 
 #ifndef __GENERATING_BOUNDS_H
 
+
+// Itay Conflict, old maio's:
+static inline struct page *__compound_head(struct page *page, int verbose)
+{
+	unsigned long head = READ_ONCE(page->compound_head);
+	
+	if (head & 1) {
+		struct page *hp =  (struct page *) (head - 1);
+		if (unlikely(verbose && hp[1].uaddr)) {
+			/*TODO: WTF warning? */
+			trace_printk("%pS:%s:%lx -> %lx\n", __builtin_return_address(0), __FUNCTION__,
+				(unsigned long)page, head -1);
+		}
+		return hp;
+	}
+	return page;
+}
+
 static inline unsigned long _compound_head(const struct page *page)
 {
 	unsigned long head = READ_ONCE(page->compound_head);
@@ -198,7 +216,9 @@ static inline unsigned long _compound_head(const struct page *page)
 	if (unlikely(head & 1))
 		return head - 1;
 	return (unsigned long)page;
+	
 }
+#define compound_head(p)	__compound_head(p, 0)
 
 #define compound_head(page)	((typeof(page))_compound_head(page))
 

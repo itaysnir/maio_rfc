@@ -207,6 +207,7 @@ static void __build_skb_around(struct sk_buff *skb, void *data,
 	skb->mac_header = (typeof(skb->mac_header))~0U;
 	skb->transport_header = (typeof(skb->transport_header))~0U;
 
+
 	/* make sure we initialize shinfo sequentially */
 	shinfo = skb_shinfo(skb);
 	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));
@@ -4381,9 +4382,10 @@ int skb_gro_receive(struct sk_buff *p, struct sk_buff *skb)
 	} else if (skb->head_frag) {
 		int nr_frags = pinfo->nr_frags;
 		skb_frag_t *frag = pinfo->frags + nr_frags;
-		struct page *page = virt_to_head_page(skb->head);
 		unsigned int first_size = headlen - offset;
 		unsigned int first_offset;
+
+		struct page *page = virt_to_head_maio_page(skb->head);
 
 		if (nr_frags + 1 + skbinfo->nr_frags > MAX_SKB_FRAGS)
 			goto merge;
@@ -5434,7 +5436,7 @@ bool skb_try_coalesce(struct sk_buff *to, struct sk_buff *from,
 
 		delta = from->truesize - SKB_DATA_ALIGN(sizeof(struct sk_buff));
 
-		page = virt_to_head_page(from->head);
+		page = virt_to_head_maio_page(from->head);
 		offset = from->data - (unsigned char *)page_address(page);
 
 		skb_fill_page_desc(to, to_shinfo->nr_frags,
