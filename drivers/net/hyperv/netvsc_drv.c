@@ -27,6 +27,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/netpoll.h>
 #include <linux/bpf.h>
+#include <linux/maio.h>
 
 #include <net/arp.h>
 #include <net/route.h>
@@ -827,6 +828,18 @@ static void netvsc_comp_ipcsum(struct sk_buff *skb)
 	iph->check = ip_fast_csum(iph, iph->ihl);
 }
 
+static int netvsc_run_maio(struct netvsc_channel *nvchan)
+{
+	//trace_printk("received %d bytes in %d chunks\n", nvchan->rsc.pktlen, nvchan->rsc.cnt);
+	if (nvchan->rsc.cnt == 1) {
+		//trace_printk("post rx %llx %d\n", (u64)nvchan->rsc.data[0], nvchan->rsc.len[0]);
+		return maio_post_rx_page_copy(nvchan->rsc.data[0], nvchan->rsc.len[0]);
+	} else {
+		trace_printk("%s: received %d bytes in %d chunks\n", __FUNCTION__, nvchan->rsc.pktlen, nvchan->rsc.cnt);
+	}
+	return 0;
+}
+
 static struct sk_buff *netvsc_alloc_recv_skb(struct net_device *net,
 					     struct netvsc_channel *nvchan,
 					     struct xdp_buff *xdp)
@@ -931,14 +944,20 @@ int netvsc_recv_callback(struct net_device *net,
 	if (net->reg_state != NETREG_REGISTERED)
 		return NVSP_STAT_FAIL;
 
-	act = netvsc_run_xdp(net, nvchan, &xdp);
+	// Itay Conflict - old theirs
+	// act = netvsc_run_xdp(net, nvchan, &xdp);
 
-	if (act != XDP_PASS && act != XDP_TX) {
-		u64_stats_update_begin(&rx_stats->syncp);
-		rx_stats->xdp_drop++;
-		u64_stats_update_end(&rx_stats->syncp);
+	// if (act != XDP_PASS && act != XDP_TX) {
+	// 	u64_stats_update_begin(&rx_stats->syncp);
+	// 	rx_stats->xdp_drop++;
+	// 	u64_stats_update_end(&rx_stats->syncp);
 
-		return NVSP_STAT_SUCCESS; /* consumed by XDP */
+	// 	return NVSP_STAT_SUCCESS; /* consumed by XDP */
+	// }
+
+	if (netvsc_run_maio(nvchan)) {
+		trace_printk("buffer stopen by MAIO\n");
+                return NVSP_STAT_SUCCESS; /* page/packet was consumed by MAIO */
 	}
 
 	/* Allocate a skb - TODO direct I/O to pages? */
