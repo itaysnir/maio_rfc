@@ -1,0 +1,7 @@
+drivers/input/input-core.ko
+drivers/input/mousedev.ko
+drivers/input/evdev.ko
+drivers/input/keyboard/atkbd.ko
+drivers/input/misc/uinput.ko
+drivers/input/touchscreen/of_touchscreen.ko
+drivers/input/touchscreen/elants_i2c.ko

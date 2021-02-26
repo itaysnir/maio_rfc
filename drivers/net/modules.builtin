@@ -1,0 +1,8 @@
+drivers/net/tun.ko
+drivers/net/virtio_net.ko
+drivers/net/xen-netfront.ko
+drivers/net/net_failover.ko
+drivers/net/phy/libphy.ko
+drivers/net/phy/fixed_phy.ko
+drivers/net/ppp/ppp_generic.ko
+drivers/net/slip/slhc.ko
