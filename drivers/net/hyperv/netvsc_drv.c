@@ -944,19 +944,7 @@ int netvsc_recv_callback(struct net_device *net,
 	if (net->reg_state != NETREG_REGISTERED)
 		return NVSP_STAT_FAIL;
 
-	// Itay Conflict - old theirs
-	// act = netvsc_run_xdp(net, nvchan, &xdp);
-
-	// if (act != XDP_PASS && act != XDP_TX) {
-	// 	u64_stats_update_begin(&rx_stats->syncp);
-	// 	rx_stats->xdp_drop++;
-	// 	u64_stats_update_end(&rx_stats->syncp);
-
-	// 	return NVSP_STAT_SUCCESS; /* consumed by XDP */
-	// }
-
-	if (netvsc_run_maio(nvchan)) {
-		trace_printk("buffer stopen by MAIO\n");
+	if (netvsc_run_maio(net, nvchan)) {
                 return NVSP_STAT_SUCCESS; /* page/packet was consumed by MAIO */
 	}
 
