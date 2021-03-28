@@ -4099,7 +4099,24 @@ unlock:
 	rtnl_unlock();
 }
 
-static void mlx5e_tx_timeout(struct net_device *dev, unsigned int txqueue)
+static void mlx5e_reset(struct net_device *dev)
+{
+	struct mlx5e_priv *priv = netdev_priv(dev);
+	int err;
+
+	rtnl_lock();
+	mutex_lock(&priv->state_lock);
+
+	err = mlx5e_safe_reopen_channels(priv);
+	if (err)
+		netdev_err(priv->netdev,
+				"mlx5e_safe_reopen_channels failed recovering from a %s, err(%d).\n",
+				__FUNCTION__, err);
+	mutex_unlock(&priv->state_lock);
+	rtnl_unlock();
+}
+
+static void mlx5e_tx_timeout(struct net_device *dev)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);
 
@@ -4275,7 +4292,304 @@ static int mlx5e_bridge_setlink(struct net_device *dev, struct nlmsghdr *nlh,
 	setting = (mode == BRIDGE_MODE_VEPA) ?  1 : 0;
 	return mlx5_eswitch_set_vepa(mdev->priv.eswitch, setting);
 }
+<<<<<<< HEAD
 #endif
+||||||| constructed merge base
+#endif
+
+const struct net_device_ops mlx5e_netdev_ops = {
+	.ndo_open                = mlx5e_open,
+	.ndo_stop                = mlx5e_close,
+	.ndo_start_xmit          = mlx5e_xmit,
+	.ndo_setup_tc            = mlx5e_setup_tc,
+	.ndo_select_queue        = mlx5e_select_queue,
+	.ndo_get_stats64         = mlx5e_get_stats,
+	.ndo_set_rx_mode         = mlx5e_set_rx_mode,
+	.ndo_set_mac_address     = mlx5e_set_mac,
+	.ndo_vlan_rx_add_vid     = mlx5e_vlan_rx_add_vid,
+	.ndo_vlan_rx_kill_vid    = mlx5e_vlan_rx_kill_vid,
+	.ndo_set_features        = mlx5e_set_features,
+	.ndo_fix_features        = mlx5e_fix_features,
+	.ndo_change_mtu          = mlx5e_change_nic_mtu,
+	.ndo_do_ioctl            = mlx5e_ioctl,
+	.ndo_set_tx_maxrate      = mlx5e_set_tx_maxrate,
+	.ndo_udp_tunnel_add      = mlx5e_add_vxlan_port,
+	.ndo_udp_tunnel_del      = mlx5e_del_vxlan_port,
+	.ndo_features_check      = mlx5e_features_check,
+	.ndo_tx_timeout          = mlx5e_tx_timeout,
+	.ndo_bpf		 = mlx5e_xdp,
+	.ndo_xdp_xmit            = mlx5e_xdp_xmit,
+	.ndo_xsk_wakeup          = mlx5e_xsk_wakeup,
+#ifdef CONFIG_MLX5_EN_ARFS
+	.ndo_rx_flow_steer	 = mlx5e_rx_flow_steer,
+#endif
+#ifdef CONFIG_MLX5_ESWITCH
+	.ndo_bridge_setlink      = mlx5e_bridge_setlink,
+	.ndo_bridge_getlink      = mlx5e_bridge_getlink,
+
+	/* SRIOV E-Switch NDOs */
+	.ndo_set_vf_mac          = mlx5e_set_vf_mac,
+	.ndo_set_vf_vlan         = mlx5e_set_vf_vlan,
+	.ndo_set_vf_spoofchk     = mlx5e_set_vf_spoofchk,
+	.ndo_set_vf_trust        = mlx5e_set_vf_trust,
+	.ndo_set_vf_rate         = mlx5e_set_vf_rate,
+	.ndo_get_vf_config       = mlx5e_get_vf_config,
+	.ndo_set_vf_link_state   = mlx5e_set_vf_link_state,
+	.ndo_get_vf_stats        = mlx5e_get_vf_stats,
+#endif
+};
+
+static int mlx5e_check_required_hca_cap(struct mlx5_core_dev *mdev)
+{
+	if (MLX5_CAP_GEN(mdev, port_type) != MLX5_CAP_PORT_TYPE_ETH)
+		return -EOPNOTSUPP;
+	if (!MLX5_CAP_GEN(mdev, eth_net_offloads) ||
+	    !MLX5_CAP_GEN(mdev, nic_flow_table) ||
+	    !MLX5_CAP_ETH(mdev, csum_cap) ||
+	    !MLX5_CAP_ETH(mdev, max_lso_cap) ||
+	    !MLX5_CAP_ETH(mdev, vlan_cap) ||
+	    !MLX5_CAP_ETH(mdev, rss_ind_tbl_cap) ||
+	    MLX5_CAP_FLOWTABLE(mdev,
+			       flow_table_properties_nic_receive.max_ft_level)
+			       < 3) {
+		mlx5_core_warn(mdev,
+			       "Not creating net device, some required device capabilities are missing\n");
+		return -EOPNOTSUPP;
+	}
+	if (!MLX5_CAP_ETH(mdev, self_lb_en_modifiable))
+		mlx5_core_warn(mdev, "Self loop back prevention is not supported\n");
+	if (!MLX5_CAP_GEN(mdev, cq_moderation))
+		mlx5_core_warn(mdev, "CQ moderation is not supported\n");
+
+	return 0;
+}
+
+void mlx5e_build_default_indir_rqt(u32 *indirection_rqt, int len,
+				   int num_channels)
+{
+	int i;
+
+	for (i = 0; i < len; i++)
+		indirection_rqt[i] = i % num_channels;
+}
+
+static bool slow_pci_heuristic(struct mlx5_core_dev *mdev)
+{
+	u32 link_speed = 0;
+	u32 pci_bw = 0;
+
+	mlx5e_port_max_linkspeed(mdev, &link_speed);
+	pci_bw = pcie_bandwidth_available(mdev->pdev, NULL, NULL, NULL);
+	mlx5_core_dbg_once(mdev, "Max link speed = %d, PCI BW = %d\n",
+			   link_speed, pci_bw);
+
+#define MLX5E_SLOW_PCI_RATIO (2)
+
+	return link_speed && pci_bw &&
+		link_speed > MLX5E_SLOW_PCI_RATIO * pci_bw;
+}
+
+static struct dim_cq_moder mlx5e_get_def_tx_moderation(u8 cq_period_mode)
+{
+	struct dim_cq_moder moder;
+
+	moder.cq_period_mode = cq_period_mode;
+	moder.pkts = MLX5E_PARAMS_DEFAULT_TX_CQ_MODERATION_PKTS;
+	moder.usec = MLX5E_PARAMS_DEFAULT_TX_CQ_MODERATION_USEC;
+	if (cq_period_mode == MLX5_CQ_PERIOD_MODE_START_FROM_CQE)
+		moder.usec = MLX5E_PARAMS_DEFAULT_TX_CQ_MODERATION_USEC_FROM_CQE;
+
+	return moder;
+}
+
+static struct dim_cq_moder mlx5e_get_def_rx_moderation(u8 cq_period_mode)
+{
+	struct dim_cq_moder moder;
+
+	moder.cq_period_mode = cq_period_mode;
+	moder.pkts = MLX5E_PARAMS_DEFAULT_RX_CQ_MODERATION_PKTS;
+	moder.usec = MLX5E_PARAMS_DEFAULT_RX_CQ_MODERATION_USEC;
+	if (cq_period_mode == MLX5_CQ_PERIOD_MODE_START_FROM_CQE)
+		moder.usec = MLX5E_PARAMS_DEFAULT_RX_CQ_MODERATION_USEC_FROM_CQE;
+
+	return moder;
+}
+
+static u8 mlx5_to_net_dim_cq_period_mode(u8 cq_period_mode)
+{
+	return cq_period_mode == MLX5_CQ_PERIOD_MODE_START_FROM_CQE ?
+		DIM_CQ_PERIOD_MODE_START_FROM_CQE :
+		DIM_CQ_PERIOD_MODE_START_FROM_EQE;
+}
+
+void mlx5e_set_tx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
+{
+	if (params->tx_dim_enabled) {
+		u8 dim_period_mode = mlx5_to_net_dim_cq_period_mode(cq_period_mode);
+
+		params->tx_cq_moderation = net_dim_get_def_tx_moderation(dim_period_mode);
+	} else {
+		params->tx_cq_moderation = mlx5e_get_def_tx_moderation(cq_period_mode);
+	}
+
+	MLX5E_SET_PFLAG(params, MLX5E_PFLAG_TX_CQE_BASED_MODER,
+			params->tx_cq_moderation.cq_period_mode ==
+				MLX5_CQ_PERIOD_MODE_START_FROM_CQE);
+}
+
+void mlx5e_set_rx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
+{
+	if (params->rx_dim_enabled) {
+		u8 dim_period_mode = mlx5_to_net_dim_cq_period_mode(cq_period_mode);
+=======
+#endif
+
+const struct net_device_ops mlx5e_netdev_ops = {
+	.ndo_open                = mlx5e_open,
+	.ndo_stop                = mlx5e_close,
+	.ndo_start_xmit          = mlx5e_xmit,
+	.ndo_setup_tc            = mlx5e_setup_tc,
+	.ndo_select_queue        = mlx5e_select_queue,
+	.ndo_get_stats64         = mlx5e_get_stats,
+	.ndo_set_rx_mode         = mlx5e_set_rx_mode,
+	.ndo_set_mac_address     = mlx5e_set_mac,
+	.ndo_vlan_rx_add_vid     = mlx5e_vlan_rx_add_vid,
+	.ndo_vlan_rx_kill_vid    = mlx5e_vlan_rx_kill_vid,
+	.ndo_set_features        = mlx5e_set_features,
+	.ndo_fix_features        = mlx5e_fix_features,
+	.ndo_change_mtu          = mlx5e_change_nic_mtu,
+	.ndo_do_ioctl            = mlx5e_ioctl,
+	.ndo_set_tx_maxrate      = mlx5e_set_tx_maxrate,
+	.ndo_udp_tunnel_add      = mlx5e_add_vxlan_port,
+	.ndo_udp_tunnel_del      = mlx5e_del_vxlan_port,
+	.ndo_features_check      = mlx5e_features_check,
+	.ndo_tx_timeout          = mlx5e_tx_timeout,
+	.ndo_bpf		 = mlx5e_xdp,
+	.ndo_xdp_xmit            = mlx5e_xdp_xmit,
+	.ndo_xsk_wakeup          = mlx5e_xsk_wakeup,
+	.ndo_dev_reset		 = mlx5e_reset,
+#ifdef CONFIG_MLX5_EN_ARFS
+	.ndo_rx_flow_steer	 = mlx5e_rx_flow_steer,
+#endif
+#ifdef CONFIG_MLX5_ESWITCH
+	.ndo_bridge_setlink      = mlx5e_bridge_setlink,
+	.ndo_bridge_getlink      = mlx5e_bridge_getlink,
+
+	/* SRIOV E-Switch NDOs */
+	.ndo_set_vf_mac          = mlx5e_set_vf_mac,
+	.ndo_set_vf_vlan         = mlx5e_set_vf_vlan,
+	.ndo_set_vf_spoofchk     = mlx5e_set_vf_spoofchk,
+	.ndo_set_vf_trust        = mlx5e_set_vf_trust,
+	.ndo_set_vf_rate         = mlx5e_set_vf_rate,
+	.ndo_get_vf_config       = mlx5e_get_vf_config,
+	.ndo_set_vf_link_state   = mlx5e_set_vf_link_state,
+	.ndo_get_vf_stats        = mlx5e_get_vf_stats,
+#endif
+};
+
+static int mlx5e_check_required_hca_cap(struct mlx5_core_dev *mdev)
+{
+	if (MLX5_CAP_GEN(mdev, port_type) != MLX5_CAP_PORT_TYPE_ETH)
+		return -EOPNOTSUPP;
+	if (!MLX5_CAP_GEN(mdev, eth_net_offloads) ||
+	    !MLX5_CAP_GEN(mdev, nic_flow_table) ||
+	    !MLX5_CAP_ETH(mdev, csum_cap) ||
+	    !MLX5_CAP_ETH(mdev, max_lso_cap) ||
+	    !MLX5_CAP_ETH(mdev, vlan_cap) ||
+	    !MLX5_CAP_ETH(mdev, rss_ind_tbl_cap) ||
+	    MLX5_CAP_FLOWTABLE(mdev,
+			       flow_table_properties_nic_receive.max_ft_level)
+			       < 3) {
+		mlx5_core_warn(mdev,
+			       "Not creating net device, some required device capabilities are missing\n");
+		return -EOPNOTSUPP;
+	}
+	if (!MLX5_CAP_ETH(mdev, self_lb_en_modifiable))
+		mlx5_core_warn(mdev, "Self loop back prevention is not supported\n");
+	if (!MLX5_CAP_GEN(mdev, cq_moderation))
+		mlx5_core_warn(mdev, "CQ moderation is not supported\n");
+
+	return 0;
+}
+
+void mlx5e_build_default_indir_rqt(u32 *indirection_rqt, int len,
+				   int num_channels)
+{
+	int i;
+
+	for (i = 0; i < len; i++)
+		indirection_rqt[i] = i % num_channels;
+}
+
+static bool slow_pci_heuristic(struct mlx5_core_dev *mdev)
+{
+	u32 link_speed = 0;
+	u32 pci_bw = 0;
+
+	mlx5e_port_max_linkspeed(mdev, &link_speed);
+	pci_bw = pcie_bandwidth_available(mdev->pdev, NULL, NULL, NULL);
+	mlx5_core_dbg_once(mdev, "Max link speed = %d, PCI BW = %d\n",
+			   link_speed, pci_bw);
+
+#define MLX5E_SLOW_PCI_RATIO (2)
+
+	return link_speed && pci_bw &&
+		link_speed > MLX5E_SLOW_PCI_RATIO * pci_bw;
+}
+
+static struct dim_cq_moder mlx5e_get_def_tx_moderation(u8 cq_period_mode)
+{
+	struct dim_cq_moder moder;
+
+	moder.cq_period_mode = cq_period_mode;
+	moder.pkts = MLX5E_PARAMS_DEFAULT_TX_CQ_MODERATION_PKTS;
+	moder.usec = MLX5E_PARAMS_DEFAULT_TX_CQ_MODERATION_USEC;
+	if (cq_period_mode == MLX5_CQ_PERIOD_MODE_START_FROM_CQE)
+		moder.usec = MLX5E_PARAMS_DEFAULT_TX_CQ_MODERATION_USEC_FROM_CQE;
+
+	return moder;
+}
+
+static struct dim_cq_moder mlx5e_get_def_rx_moderation(u8 cq_period_mode)
+{
+	struct dim_cq_moder moder;
+
+	moder.cq_period_mode = cq_period_mode;
+	moder.pkts = MLX5E_PARAMS_DEFAULT_RX_CQ_MODERATION_PKTS;
+	moder.usec = MLX5E_PARAMS_DEFAULT_RX_CQ_MODERATION_USEC;
+	if (cq_period_mode == MLX5_CQ_PERIOD_MODE_START_FROM_CQE)
+		moder.usec = MLX5E_PARAMS_DEFAULT_RX_CQ_MODERATION_USEC_FROM_CQE;
+
+	return moder;
+}
+
+static u8 mlx5_to_net_dim_cq_period_mode(u8 cq_period_mode)
+{
+	return cq_period_mode == MLX5_CQ_PERIOD_MODE_START_FROM_CQE ?
+		DIM_CQ_PERIOD_MODE_START_FROM_CQE :
+		DIM_CQ_PERIOD_MODE_START_FROM_EQE;
+}
+
+void mlx5e_set_tx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
+{
+	if (params->tx_dim_enabled) {
+		u8 dim_period_mode = mlx5_to_net_dim_cq_period_mode(cq_period_mode);
+
+		params->tx_cq_moderation = net_dim_get_def_tx_moderation(dim_period_mode);
+	} else {
+		params->tx_cq_moderation = mlx5e_get_def_tx_moderation(cq_period_mode);
+	}
+
+	MLX5E_SET_PFLAG(params, MLX5E_PFLAG_TX_CQE_BASED_MODER,
+			params->tx_cq_moderation.cq_period_mode ==
+				MLX5_CQ_PERIOD_MODE_START_FROM_CQE);
+}
+
+void mlx5e_set_rx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
+{
+	if (params->rx_dim_enabled) {
+		u8 dim_period_mode = mlx5_to_net_dim_cq_period_mode(cq_period_mode);
+>>>>>>> MAIO:
 
 const struct net_device_ops mlx5e_netdev_ops = {
 	.ndo_open                = mlx5e_open,

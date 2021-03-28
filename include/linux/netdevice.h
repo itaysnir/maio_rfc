@@ -1577,6 +1577,8 @@ struct net_device_ops {
 	struct net_device *	(*ndo_get_peer_dev)(struct net_device *dev);
 	int                     (*ndo_fill_forward_path)(struct net_device_path_ctx *ctx,
                                                          struct net_device_path *path);
+	void 			(*ndo_dev_reset)(struct net_device *dev);
+
 };
 
 /**
