@@ -34,7 +34,6 @@
 #include <linux/ipv6.h>
 #include <linux/tcp.h>
 #include <linux/indirect_call_wrapper.h>
-#include <linux/maio.h>
 #include <net/ip6_checksum.h>
 #include <net/page_pool.h>
 #include <net/inet_ecn.h>
@@ -69,6 +68,8 @@ const struct mlx5e_rx_handlers mlx5e_rx_handlers_nic = {
 	.handle_rx_cqe       = mlx5e_handle_rx_cqe,
 	.handle_rx_cqe_mpwqe = mlx5e_handle_rx_cqe_mpwrq,
 };
+
+#include <linux/maio.h>
 
 static inline bool mlx5e_rx_hw_stamp(struct hwtstamp_config *config)
 {
