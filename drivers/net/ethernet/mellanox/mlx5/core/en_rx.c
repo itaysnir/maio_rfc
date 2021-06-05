@@ -1176,6 +1176,9 @@ mlx5e_skb_from_cqe_linear(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe,
 	void *va, *data;
 	u32 frag_size;
 
+	u16 vlan_tci	= 0;
+	u16 maio_flags	= 0;
+
 	va             = page_address(di->page) + wi->offset;
 	data           = va + rx_headroom;
 	frag_size      = MLX5_SKB_FRAG_SZ(rx_headroom + cqe_bcnt);
@@ -1185,10 +1188,13 @@ mlx5e_skb_from_cqe_linear(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe,
 	net_prefetchw(va); /* xdp_frame data area */
 	net_prefetch(data);
 
-	// Itay Conflict - deleted these
-	// mlx5e_fill_xdp_buff(rq, va, rx_headroom, cqe_bcnt, &xdp);
-	// if (mlx5e_xdp_handle(rq, di, &cqe_bcnt, &xdp))
-	if (maio_post_rx_page(data, cqe_bcnt))
+	if (cqe_has_vlan(cqe)) {
+		maio_flags 	|= MAIO_STATUS_VLAN_VALID;
+		vlan_tci	= be16_to_cpu(cqe->vlan_info);
+		rq->stats->removed_vlan_packets++;
+	}
+
+	if (maio_post_rx_page(rq->netdev, data, cqe_bcnt, vlan_tci, maio_flags))
 		return NULL; /* page/packet was consumed by MAIO */
 
 	/* Capture RX here... */
