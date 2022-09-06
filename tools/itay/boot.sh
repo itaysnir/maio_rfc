@@ -14,7 +14,6 @@ if [ $# -ge 1 ] && [ "$1" = "build-fs" ]; then
 	sudo rm -rf ${DEBIAN_FS}
 	sudo mkdir -p ${DEBIAN_FS}
 	sudo debootstrap --include=openssh-server \
-		--include=gcc-4.9-base \
 		${DEBIAN_SUITE} ${DEBIAN_FS}
 
 
@@ -31,6 +30,7 @@ if [ $# -ge 1 ] && [ "$1" = "build-fs" ]; then
 	sudo mount -o loop ${DEBIAN_IMG} /mnt/jessie
 	sudo cp -a ${DEBIAN_FS}/. /mnt/jessie/.
 	sudo umount /mnt/jessie
+	sudo rm -rf /mnt/jessie
 fi
 
 #	-nographic \
