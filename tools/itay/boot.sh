@@ -13,7 +13,7 @@ DEBIAN_IMG="${DEBIAN_FS}.img"
 if [ $# -ge 1 ] && [ "$1" = "build-fs" ]; then
 	sudo rm -rf ${DEBIAN_FS}
 	sudo mkdir -p ${DEBIAN_FS}
-	sudo debootstrap --include=openssh-server \
+	sudo debootstrap --include=openssh-server,build-essential \
 		${DEBIAN_SUITE} ${DEBIAN_FS}
 
 
