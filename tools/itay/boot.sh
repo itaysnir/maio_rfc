@@ -38,7 +38,7 @@ if [ $# -ge 1 ] && [ "$1" = "build-fs" ]; then
 	sudo rm -rf /mnt/jessie
 fi
 
-#	-nographic \
+# 	-nographic \
 #	-append "root=/dev/vda loglevel=15 console=hvc0 nokaslr" \
 
 qemu-system-"$ARCH" \
