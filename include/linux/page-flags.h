@@ -193,7 +193,7 @@ enum pageflags {
 
 
 // Itay Conflict, old maio's:
-static inline struct page *__compound_head(const struct page *page, int verbose)
+static inline struct page *__compound_head(struct page *page, int verbose)
 {
 	unsigned long head = READ_ONCE(page->compound_head);
 	
@@ -221,8 +221,8 @@ static inline unsigned long _compound_head(const struct page *page)
 
 
 // Itay conflict
-// #define compound_head(p)	__compound_head(p, 0)
-#define compound_head(page)	((typeof(page))_compound_head(page))
+#define compound_head(p)	__compound_head(p, 0)
+// #define compound_head(page)	((typeof(page))_compound_head(page))
 
 static __always_inline int PageTail(struct page *page)
 {
