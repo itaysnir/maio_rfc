@@ -42,9 +42,8 @@ fi
 #	-append "root=/dev/vda loglevel=15 console=hvc0 nokaslr" \
 
 qemu-system-"$ARCH" \
-	-kernel /boot/vmlinuz-5.4.0+ \
+	-kernel ${BZIMAGE} \
 	-drive file=${DEBIAN_IMG},if=virtio,format=raw \
-	-initrd /boot/initrd.img-5.4.0+ \
 	-append "root=/dev/vda rw nokaslr" \
 	-m 1024 \
 	-s \
